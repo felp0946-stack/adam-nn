@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Save } from "lucide-react";
+import { Github, Save } from "lucide-react";
 import { toast } from "sonner";
 import { errMsg, useApi } from "@/lib/api";
 import PageHeader from "@/components/adam/PageHeader";
@@ -39,6 +39,41 @@ function BrazilianVoices({ current, onPicked }) {
         </div>
       ))}
     </div>
+  );
+}
+
+function GithubConnect() {
+  const api = useApi();
+  const [st, setSt] = useState(null);
+  const [token, setToken] = useState("");
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { api.get("/github/status").then((r) => setSt(r.data)).catch(() => setSt({ connected: false })); }, [api]);
+  const connect = async () => {
+    setBusy(true);
+    try { const { data } = await api.put("/github/token", { token }); setSt(data); setToken(""); toast.success(`GitHub conectado como ${data.login}`); }
+    catch (e) { toast.error(errMsg(e)); }
+    setBusy(false);
+  };
+  const disconnect = async () => { const { data } = await api.delete("/github/token"); setSt(data); toast.success("GitHub desconectado"); };
+  return (
+    <section className="p-6 rounded-2xl bg-[#12141D] border border-white/[0.07] mb-5" data-testid="settings-github-section">
+      <h2 className="font-display text-lg flex items-center gap-2"><Github className="w-4 h-4" /> GitHub</h2>
+      <p className="text-sm text-zinc-500 mt-1 mb-4">Conecte para o Adam criar repositórios, fazer commit/push dos sites e arquivos gerados e publicar no GitHub Pages.</p>
+      {st?.connected ? (
+        <div className="flex items-center gap-3">
+          <p className="text-sm text-emerald-300 flex-1" data-testid="github-connected-login">Conectado como <b>{st.login}</b></p>
+          <button onClick={disconnect} data-testid="github-disconnect-button" className="text-xs px-3 py-2 rounded-lg border border-white/10 text-rose-300 hover:bg-rose-500/10">Desconectar</button>
+        </div>
+      ) : (<>
+        <div className="flex flex-col sm:flex-row gap-2">
+          <input type="password" data-testid="github-token-input" className={field} value={token} onChange={(e) => setToken(e.target.value)} placeholder="Token pessoal do GitHub" autoComplete="off" />
+          <button onClick={connect} disabled={busy || token.length < 10} data-testid="github-connect-button" className="px-5 py-3 rounded-xl bg-white/10 hover:bg-white/15 text-sm disabled:opacity-50 shrink-0">{busy ? "Conectando…" : "Conectar"}</button>
+        </div>
+        <p className="text-xs text-zinc-500 mt-2">
+          Crie em <a href="https://github.com/settings/tokens/new?scopes=repo,workflow&description=Adam" target="_blank" rel="noopener noreferrer" className="text-[#F4A261] underline">github.com/settings/tokens</a> com o escopo <code>repo</code>. O token fica salvo só na sua conta do Adam.
+        </p>
+      </>)}
+    </section>
   );
 }
 
@@ -91,6 +126,8 @@ export default function SettingsPage() {
             Ler todas as respostas em voz alta automaticamente
           </label>
         </section>
+
+        <GithubConnect />
 
         <section className="p-6 rounded-2xl bg-[#12141D] border border-white/[0.07] mb-5">
           <h2 className="font-display text-lg">Aprendizado contínuo</h2>

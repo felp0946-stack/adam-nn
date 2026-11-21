@@ -4,12 +4,15 @@ import hashlib
 import json
 import logging
 import os
+import re
 import secrets
 import uuid
 from contextlib import suppress
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import List, Optional
+from urllib.parse import quote
+from xml.sax.saxutils import escape as xml_escape
 
 from dotenv import load_dotenv
 
@@ -29,7 +32,7 @@ from starlette.middleware.cors import CORSMiddleware
 
 try:
     from backend.clerk_auth import clerk_router, require_user
-    from backend import storage, files_util, web_tools, browser_agent
+    from backend import storage, files_util, web_tools, browser_agent, code_agent
     from backend.neural import engine as neural
 except ModuleNotFoundError:
     from clerk_auth import clerk_router, require_user
@@ -37,6 +40,7 @@ except ModuleNotFoundError:
     import files_util
     import web_tools
     import browser_agent
+    import code_agent
     from neural import engine as neural
 
 mongo_url = os.environ["MONGO_URL"]
@@ -52,7 +56,8 @@ INDEXES: dict = {
     "conversations": [IndexModel([("id", ASCENDING)], name="id", unique=True),
                       IndexModel([("user_id", ASCENDING), ("updated_at", DESCENDING)], name="user_updated")],
     "messages": [IndexModel([("conversation_id", ASCENDING), ("created_at", ASCENDING)], name="conv_created")],
-    "files": [IndexModel([("id", ASCENDING)], name="id", unique=True)],
+    "files": [IndexModel([("id", ASCENDING)], name="id", unique=True),
+              IndexModel([("share_token", ASCENDING)], name="share_token", sparse=True)],
     "memories": [IndexModel([("user_id", ASCENDING), ("created_at", DESCENDING)], name="user_created")],
     "api_keys": [IndexModel([("hash", ASCENDING)], name="hash", unique=True),
                  IndexModel([("user_id", ASCENDING)], name="user")],
@@ -161,6 +166,30 @@ class CorpusIn(BaseModel):
     text: str = Field(min_length=20, max_length=200000)
 
 
+class TextFileIn(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    content: str = Field(min_length=1, max_length=2_000_000)
+
+
+class GithubTokenIn(BaseModel):
+    token: str = Field(min_length=10, max_length=300)
+
+
+class GithubPushIn(BaseModel):
+    file_id: str
+    repo: str = Field(min_length=1, max_length=100, pattern=r"^[A-Za-z0-9._-]+$")
+    path: str = Field(min_length=1, max_length=200)
+    message: str = Field(default="Atualização feita pelo Adam", min_length=1, max_length=200)
+    private: bool = False
+    pages: bool = False
+
+
+class CodeStartIn(BaseModel):
+    task: str = Field(min_length=1, max_length=20000)
+    context: str = Field(default="", max_length=60000)
+    session_id: Optional[str] = None
+
+
 class V1ChatIn(BaseModel):
     message: str = Field(min_length=1, max_length=50000)
     conversation_id: Optional[str] = None
@@ -180,7 +209,7 @@ Método de raciocínio (siga sempre em tarefas complexas — matemática, lógic
 Se não tiver certeza de um fato, diga e use pesquisar_web. Quando houver trechos da base de conhecimento do usuário, use-os e cite o nome do documento.
 
 Ferramentas disponíveis:
-- criar_arquivo: SEMPRE que o usuário pedir um documento, planilha, script, site ou qualquer arquivo para baixar, chame esta ferramenta (pdf, docx, xlsx, py, js, html, css, json, md, csv, txt, etc.). Para sites, gere um único arquivo .html completo com CSS e JS embutidos.
+- criar_arquivo: SEMPRE que o usuário pedir um documento, planilha, script, site ou qualquer arquivo para baixar, chame esta ferramenta (pdf, docx, xlsx, py, js, html, css, json, md, csv, txt, etc.). Para sites, gere um único arquivo .html completo com CSS e JS embutidos (nunca cole o código do site só no chat: o arquivo aparece com prévia ao vivo, aba de código, botão para abrir no navegador e envio ao GitHub).
   - pdf/docx: conteúdo em texto com títulos "# ", "## ", listas "- " e **negrito**.
   - xlsx: conteúdo em CSV (primeira linha = cabeçalho).
 - gerar_imagem: quando o usuário pedir para criar/desenhar/gerar uma imagem. Escreva o prompt em inglês, detalhado.
@@ -513,6 +542,42 @@ async def list_conversations(user: dict = Depends(require_user)):
     return await db.conversations.find({"user_id": user["user_id"]}, {"_id": 0, "user_id": 0}).sort("updated_at", -1).to_list(300)
 
 
+def _snippet(text: str, q: str) -> str:
+    i = text.lower().find(q.lower())
+    if i < 0:
+        return ""
+    s = max(0, i - 40)
+    return ("…" if s else "") + text[s:i + len(q) + 80].replace("\n", " ") + "…"
+
+
+@api.get("/conversations/search")
+async def search_conversations(q: str = "", engine: str = "", period: str = "all", scope: str = "all",
+                               user: dict = Depends(require_user)):
+    uid = user["user_id"]
+    flt: dict = {"user_id": uid}
+    if engine in ("pro", "neural", "local"):
+        flt["engine"] = engine
+    days = {"1d": 1, "7d": 7, "30d": 30, "90d": 90}.get(period)
+    if days:
+        flt["updated_at"] = {"$gte": (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()}
+    proj = {"_id": 0, "user_id": 0, "summary": 0}
+    q = q.strip()[:200]
+    if not q:
+        return await db.conversations.find(flt, proj).sort("updated_at", -1).to_list(300)
+    rx = {"$regex": re.escape(q), "$options": "i"}
+    snippets: dict = {}
+    if scope == "all":
+        async for m in db.messages.find({"user_id": uid, "content": rx}, {"_id": 0, "conversation_id": 1, "content": 1}).sort("created_at", -1).limit(500):
+            snippets.setdefault(m["conversation_id"], _snippet(m["content"], q))
+        flt["$or"] = [{"title": rx}, {"id": {"$in": list(snippets)}}]
+    else:
+        flt["title"] = rx
+    convs = await db.conversations.find(flt, proj).sort("updated_at", -1).to_list(150)
+    for c in convs:
+        c["snippet"] = snippets.get(c["id"], "")
+    return convs
+
+
 @api.get("/conversations/{cid}")
 async def get_conversation(cid: str, user: dict = Depends(require_user)):
     conv = await db.conversations.find_one({"id": cid, "user_id": user["user_id"]}, {"_id": 0, "user_id": 0})
@@ -597,8 +662,8 @@ async def delete_memory(mid: str, user: dict = Depends(require_user)):
 
 @api.get("/settings")
 async def get_settings(user: dict = Depends(require_user)):
-    st = await db.settings.find_one({"user_id": user["user_id"]}, {"_id": 0, "user_id": 0})
-    return st or SettingsIn().model_dump()
+    st = await db.settings.find_one({"user_id": user["user_id"]}, {"_id": 0, "user_id": 0, "github_token": 0}) or {}
+    return {**SettingsIn().model_dump(), **st}
 
 
 @api.put("/settings")
@@ -786,7 +851,6 @@ async def kb_search_route(q: str, user: dict = Depends(require_user)):
 
 # ---------- Routes: voice ----------
 def speech_text(md: str) -> str:
-    import re
     t = re.sub(r"```.*?```", " (há um bloco de código na tela) ", md, flags=re.S)
     t = re.sub(r"!\[[^\]]*\]\([^)]*\)", "", t)
     t = re.sub(r"\[([^\]]+)\]\([^)]*\)", r"\1", t)
@@ -1058,6 +1122,215 @@ async def extension_download(server: str, user: dict = Depends(require_user)):
         z.writestr("adam-extension/config.js", f"const ADAM_SERVER = {json.dumps(server.rstrip('/'))};\n")
     return Response(content=buf.getvalue(), media_type="application/zip",
                     headers={"Content-Disposition": 'attachment; filename="adam-extension.zip"'})
+
+
+# ---------- Routes: sites (share + text files) ----------
+@api.post("/files/text")
+async def save_text_file(body: TextFileIn, user: dict = Depends(require_user)):
+    name = body.name.strip().replace("/", "_")
+    data, mime = await asyncio.to_thread(files_util.build_file, name, body.content)
+    return await save_file(user["user_id"], name, data, mime, "generated")
+
+
+@api.post("/files/{fid}/share")
+async def share_file(fid: str, user: dict = Depends(require_user)):
+    rec = await db.files.find_one({"id": fid, "user_id": user["user_id"], "is_deleted": False}, {"_id": 0})
+    if not rec:
+        raise HTTPException(404, "Arquivo não encontrado")
+    token = rec.get("share_token") or secrets.token_urlsafe(16)
+    await db.files.update_one({"id": fid}, {"$set": {"share_token": token}})
+    return {"path": f"/api/s/{token}"}
+
+
+@api.get("/s/{token}")
+async def public_site(token: str):
+    rec = await db.files.find_one({"share_token": token, "is_deleted": False}, {"_id": 0})
+    if not rec:
+        raise HTTPException(404, "Link não encontrado")
+    data, _ = await asyncio.to_thread(storage.get_object, rec["storage_path"])
+    mime = rec["mime"] if rec["mime"] != "text/html" else "text/html; charset=utf-8"
+    return Response(content=data, media_type=mime, headers={
+        "Content-Security-Policy": "sandbox allow-scripts allow-forms allow-popups allow-modals allow-downloads",
+        "Content-Disposition": f'inline; filename="{quote(rec["name"])}"'})
+
+
+# ---------- Routes: GitHub ----------
+GH_API = "https://api.github.com"
+
+
+def gh_headers(token: str) -> dict:
+    return {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"}
+
+
+def gh_err(r) -> str:
+    try:
+        msg = r.json().get("message", "")
+    except Exception:
+        msg = r.text[:200]
+    if r.status_code in (401, 403):
+        return f"GitHub recusou ({msg}). Verifique se o token tem permissão de repositórios (repo) e Pages."
+    return f"GitHub: {msg or r.status_code}"
+
+
+@api.get("/github/status")
+async def github_status(user: dict = Depends(require_user)):
+    st = await db.settings.find_one({"user_id": user["user_id"]}, {"_id": 0, "github_token": 1, "github_login": 1}) or {}
+    return {"connected": bool(st.get("github_token")), "login": st.get("github_login", "")}
+
+
+@api.put("/github/token")
+async def github_connect(body: GithubTokenIn, user: dict = Depends(require_user)):
+    token = body.token.strip()
+    async with httpx.AsyncClient(timeout=20) as hc:
+        r = await hc.get(f"{GH_API}/user", headers=gh_headers(token))
+    if r.status_code != 200:
+        raise HTTPException(400, "Token do GitHub inválido.")
+    login = r.json()["login"]
+    await db.settings.update_one({"user_id": user["user_id"]}, {"$set": {"github_token": token, "github_login": login}}, upsert=True)
+    return {"connected": True, "login": login}
+
+
+@api.delete("/github/token")
+async def github_disconnect(user: dict = Depends(require_user)):
+    await db.settings.update_one({"user_id": user["user_id"]}, {"$unset": {"github_token": "", "github_login": ""}})
+    return {"connected": False, "login": ""}
+
+
+@api.post("/github/push")
+async def github_push(body: GithubPushIn, user: dict = Depends(require_user)):
+    uid = user["user_id"]
+    st = await db.settings.find_one({"user_id": uid}, {"_id": 0, "github_token": 1}) or {}
+    if not st.get("github_token"):
+        raise HTTPException(400, "Conecte sua conta do GitHub em Configurações.")
+    rec = await db.files.find_one({"id": body.file_id, "user_id": uid, "is_deleted": False}, {"_id": 0})
+    if not rec:
+        raise HTTPException(404, "Arquivo não encontrado")
+    data, _ = await asyncio.to_thread(storage.get_object, rec["storage_path"])
+    path = "/".join(p for p in body.path.strip().split("/") if p and p != "..")
+    qpath = quote(path)
+    async with httpx.AsyncClient(base_url=GH_API, headers=gh_headers(st["github_token"]), timeout=30) as hc:
+        me = await hc.get("/user")
+        if me.status_code != 200:
+            raise HTTPException(400, "Token do GitHub inválido ou expirado. Reconecte em Configurações.")
+        login = me.json()["login"]
+        repo = await hc.get(f"/repos/{login}/{body.repo}")
+        created = repo.status_code == 404
+        if created:
+            repo = await hc.post("/user/repos", json={"name": body.repo, "private": body.private, "auto_init": True,
+                                                      "description": "Criado com o Adam"})
+        if repo.status_code >= 300:
+            raise HTTPException(400, gh_err(repo))
+        info = repo.json()
+        branch = info.get("default_branch") or "main"
+        payload = {"message": body.message, "content": base64.b64encode(data).decode(), "branch": branch}
+        cur = await hc.get(f"/repos/{login}/{body.repo}/contents/{qpath}", params={"ref": branch})
+        if cur.status_code == 200 and isinstance(cur.json(), dict):
+            payload["sha"] = cur.json()["sha"]
+        put = None
+        for _ in range(3):
+            put = await hc.put(f"/repos/{login}/{body.repo}/contents/{qpath}", json=payload)
+            if put.status_code != 409 and put.status_code != 404:
+                break
+            await asyncio.sleep(1.5)
+        if put.status_code >= 300:
+            raise HTTPException(400, gh_err(put))
+        result = {"repo_url": info["html_url"], "commit_url": put.json()["commit"]["html_url"], "created": created,
+                  "file_url": f"{info['html_url']}/blob/{branch}/{path}", "pages_url": "", "pages_error": ""}
+        if body.pages:
+            pg = await hc.post(f"/repos/{login}/{body.repo}/pages", json={"source": {"branch": branch, "path": "/"}})
+            if pg.status_code < 300 or pg.status_code == 409:
+                suffix = "" if path == "index.html" else path
+                result["pages_url"] = f"https://{login}.github.io/{body.repo}/{suffix}"
+            else:
+                result["pages_error"] = gh_err(pg)
+    return result
+
+
+# ---------- Routes: VS Code agent ----------
+@api.post("/v1/code/start")
+async def code_start(body: CodeStartIn, request: Request):
+    user = await agent_user(request)
+    mems = await db.memories.find({"user_id": user["user_id"]}, {"_id": 0, "fact": 1}).to_list(30)
+    ctx = ("\n\nFatos sobre o usuário:\n" + "\n".join(f"- {m['fact']}" for m in mems)) if mems else ""
+    try:
+        return await code_agent.start(LLM_KEY, PRO_MODEL, user["user_id"], body.task, body.context, body.session_id, ctx)
+    except Exception as e:
+        logger.exception("code agent start failed")
+        raise HTTPException(502, f"Falha no agente: {str(e)[:200]}")
+
+
+@api.post("/v1/code/{sid}/step")
+async def code_step(sid: str, body: AgentStepIn, request: Request):
+    user = await agent_user(request)
+    try:
+        return await code_agent.step(sid, user["user_id"], body.tool_call_id, body.result)
+    except KeyError as e:
+        raise HTTPException(404, str(e))
+    except Exception as e:
+        logger.exception("code agent step failed")
+        raise HTTPException(502, f"Falha no agente: {str(e)[:200]}")
+
+
+@api.post("/v1/code/{sid}/stop")
+async def code_stop(sid: str, request: Request):
+    user = await agent_user(request)
+    code_agent.stop(sid, user["user_id"])
+    return {"ok": True}
+
+
+VSIX_TYPES = {".json": "application/json", ".js": "application/javascript", ".css": "text/css", ".svg": "image/svg+xml",
+              ".md": "text/markdown", ".vsixmanifest": "text/xml"}
+VSIX_MANIFEST = """<?xml version="1.0" encoding="utf-8"?>
+<PackageManifest Version="2.0.0" xmlns="http://schemas.microsoft.com/developer/vsx-schema/2011" xmlns:d="http://schemas.microsoft.com/developer/vsx-schema-design/2011">
+  <Metadata>
+    <Identity Language="en-US" Id="{name}" Version="{version}" Publisher="{publisher}" />
+    <DisplayName>{display}</DisplayName>
+    <Description xml:space="preserve">{desc}</Description>
+    <Tags></Tags>
+    <Categories>Other</Categories>
+    <GalleryFlags>Public</GalleryFlags>
+    <Properties>
+      <Property Id="Microsoft.VisualStudio.Code.Engine" Value="{engine}" />
+      <Property Id="Microsoft.VisualStudio.Code.ExtensionDependencies" Value="" />
+      <Property Id="Microsoft.VisualStudio.Code.ExtensionPack" Value="" />
+      <Property Id="Microsoft.VisualStudio.Code.ExtensionKind" Value="workspace" />
+      <Property Id="Microsoft.VisualStudio.Code.LocalizedLanguages" Value="" />
+    </Properties>
+  </Metadata>
+  <Installation>
+    <InstallationTarget Id="Microsoft.VisualStudio.Code"/>
+  </Installation>
+  <Dependencies/>
+  <Assets>
+    <Asset Type="Microsoft.VisualStudio.Code.Manifest" Path="extension/package.json" Addressable="true" />
+    <Asset Type="Microsoft.VisualStudio.Services.Content.Details" Path="extension/README.md" Addressable="true" />
+  </Assets>
+</PackageManifest>"""
+
+
+@api.get("/vscode/download")
+async def vscode_download(server: str, user: dict = Depends(require_user)):
+    import io
+    import zipfile
+    if not server.startswith(("https://", "http://")):
+        raise HTTPException(400, "Servidor inválido")
+    src = ROOT_DIR / "vscode"
+    pkg = json.loads((src / "package.json").read_text(encoding="utf-8"))
+    pkg["contributes"]["configuration"]["properties"]["adam.server"]["default"] = server.rstrip("/")
+    manifest = VSIX_MANIFEST.format(name=pkg["name"], version=pkg["version"], publisher=pkg["publisher"],
+                                    display=xml_escape(pkg["displayName"]), desc=xml_escape(pkg["description"]),
+                                    engine=pkg["engines"]["vscode"])
+    types = "".join(f'<Default Extension="{e}" ContentType="{t}"/>' for e, t in VSIX_TYPES.items())
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr("[Content_Types].xml", f'<?xml version="1.0" encoding="utf-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">{types}</Types>')
+        z.writestr("extension.vsixmanifest", manifest)
+        z.writestr("extension/package.json", json.dumps(pkg, ensure_ascii=False, indent=2))
+        for p in src.rglob("*"):
+            if p.is_file() and p.name != "package.json":
+                z.write(p, f"extension/{p.relative_to(src).as_posix()}")
+    return Response(content=buf.getvalue(), media_type="application/octet-stream",
+                    headers={"Content-Disposition": 'attachment; filename="adam-vscode.vsix"'})
 
 
 app.include_router(api)

@@ -41,3 +41,9 @@ Construir "Adam", IA própria estilo ChatGPT/Claude/Manus, criada por Felipe Hud
 - P1: Voz (STT/TTS), edição de imagens, preview ao vivo de sites gerados, execução de Python em sandbox.
 - P1: API de busca dedicada (pesquisa atual é scraping e pode ser limitada).
 - P2: Plugin/widget embutível, fine-tuning com GPU, tokenizer BPE, modelo maior.
+
+## Implementado (2026-11-21) — iteração 5
+- Sites gerados: abas Prévia/Código, botão "Abrir no navegador" (link público /api/s/{token}, isolado com CSP sandbox), envio ao GitHub. Blocos ```html no chat ganham Prévia/Abrir/GitHub.
+- GitHub: token pessoal em Configurações; POST /api/github/push cria repo (se não existir), faz commit do arquivo e opcionalmente publica no GitHub Pages.
+- Histórico: ícones de navegação compactos, histórico ocupa a lateral, busca (título + conteúdo das mensagens) com filtros de período e motor, agrupado por data, barra de rolagem maior.
+- Extensão VS Code (.vsix em /vscode → /api/vscode/download): agente lê/busca/edita arquivos, lê diagnósticos, roda comandos; diff + aprovação antes de cada edição/comando. Cérebro: Adam Pro (/api/v1/code/*) com Ollama local (qwen2.5, localhost:11434) de reserva.

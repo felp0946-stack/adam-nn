@@ -1,0 +1,47 @@
+{
+  "name": "adam-vscode",
+  "displayName": "Adam — IA de programação",
+  "description": "O Adam lê seu projeto, corrige bugs, implementa melhorias e executa ações no VS Code, sempre com sua permissão.",
+  "version": "1.0.0",
+  "publisher": "felipehudson",
+  "license": "UNLICENSED",
+  "engines": { "vscode": "^1.80.0" },
+  "categories": ["Programming Languages", "Other"],
+  "main": "./extension.js",
+  "activationEvents": ["onStartupFinished"],
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [{ "id": "adam", "title": "Adam", "icon": "media/icon.svg" }]
+    },
+    "views": {
+      "adam": [{ "type": "webview", "id": "adam.chat", "name": "Chat" }]
+    },
+    "commands": [
+      { "command": "adam.newChat", "title": "Adam: Nova conversa" },
+      { "command": "adam.askSelection", "title": "Adam: Explicar / revisar a seleção" },
+      { "command": "adam.fixProblems", "title": "Adam: Corrigir erros do arquivo aberto" },
+      { "command": "adam.setApiKey", "title": "Adam: Configurar chave de API" }
+    ],
+    "menus": {
+      "editor/context": [
+        { "command": "adam.askSelection", "when": "editorHasSelection", "group": "navigation@50" },
+        { "command": "adam.fixProblems", "group": "navigation@51" }
+      ]
+    },
+    "configuration": {
+      "title": "Adam",
+      "properties": {
+        "adam.server": { "type": "string", "default": "", "description": "Endereço do servidor do Adam." },
+        "adam.engine": {
+          "type": "string",
+          "enum": ["auto", "pro", "local"],
+          "enumDescriptions": ["Adam Pro, com Ollama local de reserva", "Somente Adam Pro (servidor)", "Somente Ollama local"],
+          "default": "auto",
+          "description": "Qual cérebro o Adam usa."
+        },
+        "adam.ollamaUrl": { "type": "string", "default": "http://localhost:11434", "description": "URL do seu Ollama." },
+        "adam.ollamaModel": { "type": "string", "default": "qwen2.5", "description": "Modelo do Ollama (precisa suportar ferramentas, ex: qwen2.5)." }
+      }
+    }
+  }
+}

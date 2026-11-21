@@ -2,12 +2,46 @@ import { useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { toast } from "sonner";
-import { BookOpen, Check, Copy, Download, ExternalLink, Globe, Loader2, Paperclip, Search, Square, Volume2 } from "lucide-react";
-import { ENGINES, useApi } from "@/lib/api";
+import { BookOpen, Check, Copy, Download, ExternalLink, Eye, Github, Globe, Loader2, Paperclip, Search, Square, Volume2 } from "lucide-react";
+import { BACKEND_URL, ENGINES, errMsg, useApi } from "@/lib/api";
 import { onSpeakingChange, speak, stopSpeaking } from "@/lib/voice";
-import { FileCard, GeneratedImage, useBlobUrl } from "@/components/adam/FileCard";
+import { FileCard, GeneratedImage, SiteFrame, useBlobUrl } from "@/components/adam/FileCard";
+import GithubPushDialog from "@/components/adam/GithubPushDialog";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { saveTextAsFile } from "@/lib/share";
 
 const EXT = { python: "py", javascript: "js", js: "js", typescript: "ts", html: "html", css: "css", json: "json", bash: "sh", sql: "sql", jsx: "jsx", java: "java" };
+
+function HtmlActions({ code }) {
+  const api = useApi();
+  const [preview, setPreview] = useState(false);
+  const [file, setFile] = useState(null);
+  const [gh, setGh] = useState(false);
+  const ensureFile = async () => file || saveTextAsFile(api, "site.html", code).then((f) => { setFile(f); return f; });
+  const open = async () => {
+    const w = window.open("", "_blank");
+    try {
+      const f = await ensureFile();
+      const { data } = await api.post(`/files/${f.id}/share`);
+      w.location.href = `${BACKEND_URL}${data.path}`;
+    } catch (e) { w?.close(); toast.error(errMsg(e)); }
+  };
+  const github = async () => {
+    try { await ensureFile(); setGh(true); } catch (e) { toast.error(errMsg(e)); }
+  };
+  return (<>
+    <button onClick={() => setPreview(true)} data-testid="code-preview-button" className="flex items-center gap-1 hover:text-white"><Eye className="w-3.5 h-3.5" />Prévia</button>
+    <button onClick={open} data-testid="code-open-browser-button" className="flex items-center gap-1 hover:text-white"><ExternalLink className="w-3.5 h-3.5" />Abrir</button>
+    <button onClick={github} data-testid="code-github-button" className="flex items-center gap-1 hover:text-white"><Github className="w-3.5 h-3.5" />GitHub</button>
+    <Dialog open={preview} onOpenChange={setPreview}>
+      <DialogContent className="max-w-[96vw] w-[96vw] h-[92vh] p-3 bg-[#0c0d14] border-white/10 flex flex-col">
+        <DialogTitle className="text-sm font-mono text-zinc-400">Prévia do site</DialogTitle>
+        <div className="flex-1 min-h-0"><SiteFrame html={code} height="100%" name="Prévia" /></div>
+      </DialogContent>
+    </Dialog>
+    {gh && file && <GithubPushDialog file={file} open={gh} onOpenChange={setGh} />}
+  </>);
+}
 
 function CodeBlock({ lang, code }) {
   const [copied, setCopied] = useState(false);
@@ -17,11 +51,13 @@ function CodeBlock({ lang, code }) {
     a.href = URL.createObjectURL(new Blob([code], { type: "text/plain" }));
     a.download = `adam.${EXT[lang] || "txt"}`; a.click();
   };
+  const isHtml = lang === "html" || /^\s*<!doctype html/i.test(code);
   return (
     <div className="rounded-xl overflow-hidden border border-white/10 bg-[#0c0d14] my-3">
       <div className="flex items-center justify-between px-4 py-2 bg-white/[0.04] border-b border-white/5 text-xs text-zinc-400 font-mono">
         <span>{lang || "código"}</span>
-        <div className="flex gap-3">
+        <div className="flex flex-wrap gap-3">
+          {isHtml && <HtmlActions code={code} />}
           <button onClick={copy} data-testid="code-copy-button" className="flex items-center gap-1 hover:text-white">
             {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}{copied ? "Copiado" : "Copiar"}
           </button>
