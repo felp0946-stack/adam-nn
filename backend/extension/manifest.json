@@ -1,0 +1,29 @@
+{
+  "manifest_version": 3,
+  "name": "Adam — Agente de Navegador",
+  "version": "1.1.0",
+  "description": "Adam, a IA de Felipe Hudson, navega, clica e digita no seu Chrome — sempre com sua permissão.",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage",
+    "sidePanel",
+    "tabs",
+    "notifications"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "action": {
+    "default_title": "Abrir o Adam"
+  },
+  "icons": {
+    "128": "icon.png"
+  }
+}

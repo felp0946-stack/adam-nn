@@ -1,0 +1,229 @@
+{
+  "project_name": "Adam AI - Cognitive Operating System",
+  "creator_context": "Criado por Felipe Hudson, 19 anos, Belo Horizonte - Minas Gerais, Brasil. Uma IA proprietária que funde a elegância e inteligência de Claude/Manus com a soberania de modelos locais e uma mini rede neural Transformer própria desenvolvida do zero em PyTorch.",
+  "language": "pt-BR",
+  "theme": "dark_first_with_toggle",
+  "design_philosophy": {
+    "aesthetic_fusion": "Swiss High-Precision Typography + Warm Obsidian Tech Canvas + Deep Thought Artifact Ledger (Manus/Claude inspired)",
+    "core_identity": "Adam não parece mais um wrapper genérico de IA. Ele possui personalidade técnica brasileira, engenharia artesanal de Belo Horizonte, controle total de motor cognitivo, micro-estados de pensamento ('Pensando...', 'Sintetizando arquivos', 'Calculando tensores') e visual premium com vidro fosco temperado.",
+    "emotional_tone": "Soberano, analítico, ultra-rápido, cinematográfico e profundamente funcional."
+  },
+  "typography": {
+    "font_family_headings": "Outfit, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+    "font_family_body": "IBM Plex Sans, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+    "font_family_mono": "JetBrains Mono, Menlo, Monaco, Consolas, monospace",
+    "hierarchy": {
+      "h1": "text-4xl sm:text-5xl lg:text-6xl font-semibold tracking-tight text-white",
+      "h2": "text-2xl sm:text-3xl lg:text-4xl font-semibold tracking-tight text-zinc-100",
+      "h3": "text-xl sm:text-2xl font-medium tracking-normal text-zinc-200",
+      "h4": "text-lg sm:text-xl font-medium text-zinc-300",
+      "body": "text-base text-zinc-300 leading-relaxed",
+      "body_small": "text-sm text-zinc-400 leading-normal",
+      "caption": "text-xs font-mono uppercase tracking-[0.18em] text-zinc-500"
+    }
+  },
+  "colors": {
+    "palette": {
+      "canvas": "#090A0F",
+      "sidebar": "#0D0E15",
+      "panel": "#12141D",
+      "panel_elevated": "#181A26",
+      "border_subtle": "rgba(255, 255, 255, 0.08)",
+      "border_strong": "rgba(255, 255, 255, 0.16)",
+      "text_primary": "#F4F4F6",
+      "text_secondary": "#A1A1B2",
+      "text_muted": "#68687D",
+      "brand_copper": "#E07A5F",
+      "brand_amber": "#F4A261",
+      "brand_emerald_active": "#2A9D8F",
+      "brand_electric_blue": "#3A86FF",
+      "brand_neural_purple": "#8338EC",
+      "accent_gradient_adam": "linear-gradient(135deg, #E07A5F 0%, #F4A261 50%, #3A86FF 100%)"
+    },
+    "engine_color_tokens": {
+      "adam_pro": {
+        "badge_bg": "bg-amber-500/10",
+        "badge_text": "text-amber-300",
+        "border": "border-amber-500/30",
+        "indicator": "#F4A261",
+        "label": "Adam Pro (Cloud Cognitive V3)"
+      },
+      "adam_neural": {
+        "badge_bg": "bg-purple-500/10",
+        "badge_text": "text-purple-300",
+        "border": "border-purple-500/30",
+        "indicator": "#8338EC",
+        "label": "Adam Neural (PyTorch Mini Transformer do Zero)"
+      },
+      "adam_local": {
+        "badge_bg": "bg-emerald-500/10",
+        "badge_text": "text-emerald-300",
+        "border": "border-emerald-500/30",
+        "indicator": "#2A9D8F",
+        "label": "Servidor Local (Ollama / Local Daemon)"
+      }
+    }
+  },
+  "layout_and_navigation": {
+    "shell": "Full height responsive shell (100dvh flex) with collapsible lateral drawer/sidebar (w-64 to w-72 on desktop, sheet/drawer on mobile).",
+    "sidebar": {
+      "header": "Logo 'ADAM' with pulsing tensor node glyph + indicator 'BH-BR v1.0.4' + Felipe Hudson attribution",
+      "actions": "Botão '+ Nova Conversa' com borda e atalho visual [Ctrl+K], busca de conversas",
+      "conversation_groups": "Hoje, Ontem, Últimos 7 dias, Fixadas",
+      "nav_links": [
+        {"id": "chat", "label": "Chat Cognitivo", "icon": "MessageSquare"},
+        {"id": "memory", "label": "Memória Longo Prazo", "icon": "Brain"},
+        {"id": "lab", "label": "Laboratório Neural", "icon": "Activity"},
+        {"id": "api", "label": "API & Chaves", "icon": "Key"},
+        {"id": "settings", "label": "Configurações & Motores", "icon": "Cpu"}
+      ],
+      "footer": "Perfil do Usuário com avatar, status do motor atual e botão de logout/alternador de tema"
+    },
+    "header_bar": {
+      "height": "h-14 px-4 sm:px-6 border-b border-white/5 bg-[#090A0F]/80 backdrop-blur-xl sticky top-0 z-40 flex items-center justify-between",
+      "left": "Seletor Dinâmico de Motor Cognitivo (dropdown com badge de latência e consumo de tokens)",
+      "center": "Título do Thread atual com status de streaming / 'Pensando...'",
+      "right": "Botões de Ação rápida: Exportar conversa (PDF/Markdown), Limpar Contexto, Modo Foco"
+    }
+  },
+  "views_and_components": {
+    "chat_view": {
+      "streaming_behavior": "Simulação ou stream real token-a-token com cursor piscante '█' no final do bloco gerador.",
+      "thought_accordion": {
+        "title": "Processo de Raciocínio (Deep Thought Protocol)",
+        "style": "bg-white/[0.02] border border-white/5 rounded-xl p-3 text-xs font-mono text-zinc-400 mb-3",
+        "content": "Exibe passos detalhados: leitura de contexto, busca vetorial na memória de longo prazo, seleção do motor e síntese."
+      },
+      "code_block": {
+        "container": "rounded-xl overflow-hidden border border-white/10 bg-[#0c0d14] my-4",
+        "header": "flex items-center justify-between px-4 py-2 bg-white/[0.04] border-b border-white/5 text-xs text-zinc-400 font-mono",
+        "actions": "Botão 'Copiar Código' com feedback visual (Copied!), botão 'Baixar Arquivo' (.py, .js, .html, etc.)"
+      },
+      "generated_file_cards": {
+        "description": "Cards visuais ricos que aparecem quando Adam gera um documento ou código para o usuário.",
+        "types": [
+          {"type": "pdf", "icon": "FileText", "badge": "PDF Document", "accent": "text-rose-400 bg-rose-500/10 border-rose-500/20"},
+          {"type": "docx", "icon": "FileSpreadsheet", "badge": "Word DOCX", "accent": "text-blue-400 bg-blue-500/10 border-blue-500/20"},
+          {"type": "xlsx", "icon": "Table", "badge": "Planilha Excel", "accent": "text-emerald-400 bg-emerald-500/10 border-emerald-500/20"},
+          {"type": "code", "icon": "Code2", "badge": "Script / Executável", "accent": "text-amber-400 bg-amber-500/10 border-amber-500/20"}
+        ],
+        "card_layout": "flex items-center justify-between p-4 rounded-xl bg-white/[0.03] border border-white/10 hover:border-white/20 transition-all shadow-sm my-2",
+        "action": "Botão de download direto disparando geração real de blob/arquivo no navegador ou API"
+      },
+      "inline_image_generation": {
+        "style": "relative group rounded-2xl overflow-hidden border border-white/10 my-4 max-w-xl",
+        "overlay": "gradiente sutil escuro com botão de download de alta resolução, botão de prompt original e badge 'Gerado por Adam Vision'",
+        "loading_skeleton": "gradiente pulsante animado 'Gerando imagem no espaço latente...'"
+      },
+      "composer_box": {
+        "position": "sticky bottom-4 mx-auto max-w-3xl w-full px-4 z-30",
+        "card": "bg-[#12141D]/90 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-2xl p-2.5 sm:p-3 transition-all focus-within:border-amber-500/50 focus-within:ring-2 focus-within:ring-amber-500/20",
+        "attachments_pill": "Área de chips para arquivos/imagens anexados com preview e botão de exclusão",
+        "action_buttons": [
+          {"id": "file_upload", "icon": "Paperclip", "tooltip": "Anexar arquivo (PDF, imagens, código, dados)"},
+          {"id": "image_generate", "icon": "Sparkles", "tooltip": "Solicitar geração de imagem"},
+          {"id": "engine_quick_switch", "icon": "Cpu", "tooltip": "Trocar motor rapidamente"},
+          {"id": "send_button", "icon": "ArrowUp", "style": "p-2 rounded-xl bg-gradient-to-r from-amber-500 to-rose-500 text-white hover:opacity-90 transition-opacity"}
+        ]
+      }
+    },
+    "memory_page": {
+      "title": "Memória Contínua do Adam",
+      "subtitle": "Fatos explícitos, preferências e contextos persistidos sobre Felipe Hudson e seus projetos em Belo Horizonte.",
+      "stats": [
+        {"label": "Fatos Armazenados", "value": "24 fatos ativos"},
+        {"label": "Uso de Espaço Vetorial", "value": "128 KB / Instantâneo"},
+        {"label": "Última Atualização", "value": "Agora mesmo"}
+      ],
+      "actions": "Adicionar nova memória manual, Limpar memórias antigas, Exportar JSON",
+      "items_grid": "Grid de cartões com tags (#preferencia, #tecnologia, #localizacao, #motor), data de registro e botão para esquecer/deletar."
+    },
+    "neural_lab_page": {
+      "title": "Laboratório Neural PyTorch (Treinado do Zero)",
+      "subtitle": "Mini arquitetura Transformer construída artesanalmente. Veja parâmetros de tensores, curvas de loss de treino e teste de inferência pura em tempo real.",
+      "metrics_banner": [
+        {"label": "Arquitetura", "value": "AdamTransformer-Nano (6 Layers, 8 Heads)"},
+        {"label": "Parâmetros", "value": "1.2M Pesos Ativos"},
+        {"label": "Vocabulário", "value": "BPE Custom (pt-BR + Code)"},
+        {"label": "Hardware", "value": "PyTorch CPU/MPS/CUDA Ready"}
+      ],
+      "interactive_playground": {
+        "training_simulator": "Botão 'Iniciar Época de Treino' com animação real de gráfico de Loss (Recharts) caindo de 4.2 para 0.88",
+        "live_generator": "Campo de prompt bruto para testar a mini rede em temperatura 0.7 e ver a completude sem filtros de nuvem",
+        "tensor_weights_visualizer": "Representação visual de matrizes de atenção e ativação de camadas"
+      }
+    },
+    "api_page": {
+      "title": "Adam Cognitive API & Chaves de Acesso",
+      "subtitle": "Integre o Adam em scripts Python, automações de terminal, apps WhatsApp e sistemas externos.",
+      "key_management": "Tabela de chaves com prefixo 'adam_live_...', data de criação, último uso, status ativo e botão de 'Revogar Chave' e 'Gerar Nova Chave'",
+      "code_examples_tabs": [
+        {"lang": "curl", "label": "cURL"},
+        {"lang": "python", "label": "Python (requests / SDK)"},
+        {"lang": "javascript", "label": "Node.js / TypeScript"}
+      ],
+      "interactive_test_box": "Mini console para testar endpoint POST /api/v1/chat com a chave selecionada e ver o JSON retornado instantaneamente"
+    }
+  },
+  "image_urls": {
+    "creator_dev_office": {
+      "url": "https://images.pexels.com/photos/4709289/pexels-photo-4709289.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+      "category": "about_creator",
+      "description": "Jovem desenvolvedor brasileiro de 19 anos em sua estação de trabalho programando inteligência artificial em Belo Horizonte"
+    },
+    "neural_network_abstract": {
+      "url": "https://images.pexels.com/photos/17483871/pexels-photo-17483871.png?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+      "category": "neural_lab_banner",
+      "description": "Estrutura tridimensional elegante de rede neural abstrata e tensores conectando nós digitais"
+    },
+    "city_belo_horizonte_vibes": {
+      "url": "https://images.unsplash.com/photo-1543958871-ccfa180a0c39?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzMjd8MHwxfHNlYXJjaHwzfHxicmF6aWxpYW4lMjB5b3VuZyUyMGRldmVsb3BlciUyMHRlY2hub2xvZ3l8ZW58MHx8fHwxNzk1Mjc5MjY0fDA&ixlib=rb-4.1.0&q=85",
+      "category": "regional_pride",
+      "description": "Horizonte e montanhas de Belo Horizonte Minas Gerais onde o Adam foi concebido"
+    },
+    "data_circuit_flow": {
+      "url": "https://images.unsplash.com/photo-1644325349124-d1756b79dd42?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2OTV8MHwxfHNlYXJjaHwzfHxhYnN0cmFjdCUyMG5ldXJhbCUyMG5ldHdvcmslMjBkZWVwJTIwbGVhcm5pbmd8ZW58MHx8fHwxNzk1Mjc5MjY4fDA&ixlib=rb-4.1.0&q=85",
+      "category": "ai_generative_inline",
+      "description": "Amostra visual de imagem de alta tecnologia gerada pelo motor Adam Vision"
+    }
+  },
+  "required_data_testids": {
+    "login_email_input": "data-testid=\"login-email-input\"",
+    "login_password_input": "data-testid=\"login-password-input\"",
+    "login_submit_button": "data-testid=\"login-submit-button\"",
+    "new_chat_button": "data-testid=\"new-chat-button\"",
+    "sidebar_chat_link": "data-testid=\"sidebar-chat-link\"",
+    "sidebar_memory_link": "data-testid=\"sidebar-memory-link\"",
+    "sidebar_lab_link": "data-testid=\"sidebar-lab-link\"",
+    "sidebar_api_link": "data-testid=\"sidebar-api-link\"",
+    "sidebar_settings_link": "data-testid=\"sidebar-settings-link\"",
+    "engine_selector_dropdown": "data-testid=\"engine-selector-dropdown\"",
+    "engine_option_pro": "data-testid=\"engine-option-pro\"",
+    "engine_option_neural": "data-testid=\"engine-option-neural\"",
+    "engine_option_local": "data-testid=\"engine-option-local\"",
+    "chat_input_textarea": "data-testid=\"chat-input-textarea\"",
+    "chat_send_button": "data-testid=\"chat-send-button\"",
+    "file_upload_button": "data-testid=\"file-upload-button\"",
+    "image_generate_trigger": "data-testid=\"image-generate-trigger\"",
+    "generated_file_card_download": "data-testid=\"generated-file-card-download\"",
+    "memory_add_button": "data-testid=\"memory-add-button\"",
+    "memory_item_card": "data-testid=\"memory-item-card\"",
+    "memory_delete_button": "data-testid=\"memory-delete-button\"",
+    "lab_train_epoch_button": "data-testid=\"lab-train-epoch-button\"",
+    "lab_generate_text_button": "data-testid=\"lab-generate-text-button\"",
+    "api_create_key_button": "data-testid=\"api-create-key-button\"",
+    "api_revoke_key_button": "data-testid=\"api-revoke-key-button\"",
+    "theme_toggle_button": "data-testid=\"theme-toggle-button\""
+  },
+  "instructions_to_main_agent": [
+    "1. Crie ou estruture a aplicação em React (.js) com suporte fluente a rotas ou alternador de abas ('Chat', 'Memória', 'Laboratório Neural', 'API', 'Configurações').",
+    "2. O seletor de motor cognitivo deve ficar visível no topo: 'Adam Pro' (IA nuvem veloz), 'Adam Neural' (Mini Transformer treinado do zero em PyTorch), e 'Servidor Local Ollama' (offline seguro). Cada motor deve alterar sutilmente o badge e o comportamento da resposta.",
+    "3. No chat, implemente streaming realista token-a-token com indicador de raciocínio ('Pensando...'), suporte a Markdown formatado, blocos de código com botão de cópia, upload de arquivos/imagens pré-visualizados e geração de arquivos para download (PDF, Word, Planilha Excel, Scripts Python/JS).",
+    "4. Adicione geração de imagens inline simulada ou conectada que renderize o card 'Gerado por Adam Vision' com botão de download.",
+    "5. Na página de 'Memória', permita visualizar os fatos já conhecidos de Felipe Hudson (ex: 'Criador do Adam, 19 anos, residente de BH', 'Gosta de PyTorch e IA artesanal', 'Prefere respostas concisas e código limpo'), adicionar novos fatos e excluir fatos.",
+    "6. Na página 'Laboratório Neural', exiba métricas reais/simuladas do Transformer próprio (6 camadas, 8 cabeças de atenção, 1.2M parâmetros), gráfico de curva de loss com Recharts que diminui ao clicar em 'Treinar Época', e uma caixa para gerar texto puro direto da mini rede.",
+    "7. Na página 'API', forneça gerador de chaves seguras (ex: adam_live_...), lista de chaves ativas, botão de revogar, e exemplos de código curl/python/javascript com botão de cópia rápida.",
+    "8. Todas as mensagens e textos de interface devem estar em português brasileiro com tom inteligente e acolhedor.",
+    "9. Inclua data-testid em todos os botões, campos de texto, links de navegação e seletores para garantir aprovação nos testes automatizados."
+  ]
+}

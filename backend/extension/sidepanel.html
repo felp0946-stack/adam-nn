@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <title>Adam</title>
+  <link rel="stylesheet" href="sidepanel.css" />
+</head>
+<body>
+  <header>
+    <div class="brand"><span class="dot"></span>ADAM</div>
+    <button id="cfgBtn" title="Configurações">⚙</button>
+  </header>
+
+  <section id="cfg" class="hidden">
+    <label>Chave de API do Adam</label>
+    <input id="apiKey" type="password" placeholder="adam_live_..." />
+    <small>Gere em Adam → API &amp; Chaves.</small>
+    <label class="row"><input id="askEach" type="checkbox" checked /> Pedir minha permissão a cada ação</label>
+    <button id="saveCfg" class="primary">Salvar</button>
+  </section>
+
+  <main id="log"></main>
+
+  <div id="approval" class="hidden">
+    <p id="approvalText"></p>
+    <div class="row">
+      <button id="allow" class="primary">Permitir</button>
+      <button id="allowAll">Permitir todas</button>
+      <button id="deny" class="danger">Negar</button>
+    </div>
+  </div>
+
+  <footer>
+    <textarea id="task" rows="2" placeholder="O que o Adam deve fazer?"></textarea>
+    <div class="row">
+      <span id="status"></span>
+      <button id="stop" class="danger hidden">Parar</button>
+      <button id="run" class="primary">Executar</button>
+    </div>
+  </footer>
+  <script src="sidepanel.js"></script>
+</body>
+</html>
