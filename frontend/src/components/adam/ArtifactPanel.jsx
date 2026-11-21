@@ -79,7 +79,7 @@ export default function ArtifactPanel({ artifact, messages, busy, onClose }) {
   const disabled = r.building || !code;
 
   return (
-    <aside className="fixed inset-0 z-40 md:static md:z-auto md:w-[50%] md:max-w-[960px] shrink-0 flex flex-col bg-[#0B0C12] md:border-l border-white/10 slide-in" data-testid="artifact-panel">
+    <aside className="fixed inset-0 z-[60] md:static md:z-auto md:w-[50%] md:max-w-[960px] shrink-0 flex flex-col bg-[#0B0C12] md:border-l border-white/10 slide-in" data-testid="artifact-panel">
       <div className="h-14 shrink-0 flex items-center gap-2 px-3 border-b border-white/5">
         <div className="min-w-0 flex-1 pl-1">
           <p className="text-sm text-white truncate" data-testid="artifact-title">{siteTitle(code)}</p>

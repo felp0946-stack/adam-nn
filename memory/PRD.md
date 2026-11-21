@@ -47,3 +47,10 @@ Construir "Adam", IA própria estilo ChatGPT/Claude/Manus, criada por Felipe Hud
 - GitHub: token pessoal em Configurações; POST /api/github/push cria repo (se não existir), faz commit do arquivo e opcionalmente publica no GitHub Pages.
 - Histórico: ícones de navegação compactos, histórico ocupa a lateral, busca (título + conteúdo das mensagens) com filtros de período e motor, agrupado por data, barra de rolagem maior.
 - Extensão VS Code (.vsix em /vscode → /api/vscode/download): agente lê/busca/edita arquivos, lê diagnósticos, roda comandos; diff + aprovação antes de cada edição/comando. Cérebro: Adam Pro (/api/v1/code/*) com Ollama local (qwen2.5, localhost:11434) de reserva.
+
+## Implementado (2026-11-21) — iteração 6 (bug: sites sem feedback / resposta perdida)
+- Causa: site gerado via argumentos de ferramenta (nada era transmitido → conexão caía por inatividade) e a geração estava presa à requisição HTTP (sair do chat cancelava e nada era salvo).
+- Correção: geração em segundo plano (Run + RUNS), SSE com heartbeat, retomada via GET /api/chat/runs/{cid}/stream; conversa retorna "running".
+- Sites agora são escritos ao vivo em bloco ```html; servidor salva o arquivo automaticamente (source=chat_block).
+- Painel lateral estilo Emergent (ArtifactPanel): Construindo… N linhas, Código ao vivo, Pré-visualização (troca automática ao terminar), Abrir no navegador, GitHub, Baixar. Card "Pré-visualização" no chat.
+- Usuário pediu: NUNCA chamar testing agent.

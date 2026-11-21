@@ -95,6 +95,7 @@ export default function ChatPage() {
 
   const stream = async (url, init, replay) => {
     const ctrl = new AbortController();
+    abortRef.current?.abort();
     abortRef.current = ctrl;
     autoOpened.current = 0;
     setBusy(true);
@@ -121,12 +122,15 @@ export default function ChatPage() {
     setBusy(false);
     setArtifact(null);
     if (!id) { setMessages([]); setTitle(""); return; }
+    let cancelled = false;
     api.get(`/conversations/${id}`).then(({ data }) => {
+      if (cancelled) return;
       setTitle(data.conversation.title);
       if (!data.running) return setMessages(data.messages);
       setMessages([...data.messages, { id: "streaming", role: "assistant", content: "", files: [], engine: data.conversation.engine }]);
       stream(`${API}/chat/runs/${id}/stream`, {}, true);
-    }).catch(() => { toast.error("Conversa não encontrada"); navigate("/"); });
+    }).catch(() => { if (!cancelled) { toast.error("Conversa não encontrada"); navigate("/"); } });
+    return () => { cancelled = true; };
   }, [id, api, navigate]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => () => abortRef.current?.abort(), []);
