@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { toast } from "sonner";
-import { BookOpen, Check, Copy, Download, ExternalLink, Eye, Github, Globe, Loader2, Paperclip, Search, Square, Volume2 } from "lucide-react";
+import { BookOpen, Check, Copy, Download, ExternalLink, Eye, Github, Globe, Loader2, Monitor, Paperclip, Search, Square, Volume2 } from "lucide-react";
+import { isSite, siteBlocks, siteTitle, useArtifact } from "@/lib/artifact";
 import { BACKEND_URL, ENGINES, errMsg, useApi } from "@/lib/api";
 import { onSpeakingChange, speak, stopSpeaking } from "@/lib/voice";
 import { FileCard, GeneratedImage, SiteFrame, useBlobUrl } from "@/components/adam/FileCard";
@@ -69,12 +70,46 @@ function CodeBlock({ lang, code }) {
   );
 }
 
+const MsgCtx = createContext(null);
+
+function SiteCard({ code, index }) {
+  const { m, streaming } = useContext(MsgCtx);
+  const artifact = useArtifact();
+  const block = siteBlocks(m.content)[index];
+  const building = streaming && block && !block.closed;
+  const active = artifact.current?.messageId === m.id && artifact.current?.index === index;
+  const lines = code.split("\n").length;
+  return (
+    <div className={`my-3 flex items-center gap-3 p-3.5 rounded-xl border transition-colors ${active ? "border-[#F4A261]/50 bg-[#F4A261]/[0.06]" : "border-white/10 bg-white/[0.03] hover:border-white/20"}`} data-testid={`site-card-${index}`}>
+      <div className="p-2.5 rounded-lg border text-orange-300 bg-orange-500/10 border-orange-500/20">{building ? <Loader2 className="w-5 h-5 animate-spin" /> : <Monitor className="w-5 h-5" />}</div>
+      <div className="min-w-0 flex-1">
+        <p className="text-sm text-white truncate">{siteTitle(code)}</p>
+        <p className="text-xs text-zinc-500" data-testid="site-card-status">{building ? <span className="text-[#F4A261]">Construindo ao vivo… {lines} linhas</span> : `Site · ${lines} linhas`}</p>
+      </div>
+      <button onClick={() => artifact.open({ messageId: m.id, index })} data-testid="site-card-preview-button"
+        className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-gradient-to-r from-[#F4A261] to-[#E07A5F] text-white hover:opacity-90">
+        <Eye className="w-3.5 h-3.5" /> Pré-visualização
+      </button>
+    </div>
+  );
+}
+
+function CodeRenderer({ lang, code }) {
+  const msg = useContext(MsgCtx);
+  const artifact = useArtifact();
+  if (msg && artifact && isSite(lang, code)) {
+    const idx = siteBlocks(msg.m.content).findIndex((b) => b.code.slice(0, 300) === code.slice(0, 300));
+    return <SiteCard code={code} index={Math.max(0, idx)} />;
+  }
+  return <CodeBlock lang={lang} code={code} />;
+}
+
 const mdComponents = {
   code({ inline, className, children }) {
     const lang = /language-(\w+)/.exec(className || "")?.[1];
     const text = String(children).replace(/\n$/, "");
     if (inline || (!lang && !text.includes("\n"))) return <code>{children}</code>;
-    return <CodeBlock lang={lang} code={text} />;
+    return <CodeRenderer lang={lang} code={text} />;
   },
   pre: ({ children }) => <>{children}</>,
 };
@@ -161,10 +196,12 @@ export default function MessageBubble({ m, streaming }) {
         {m.tool && streaming && <p className="text-xs font-mono text-[#F4A261] animate-pulse mb-1" data-testid="tool-status">{m.tool}…</p>}
         {!m.content && streaming && !m.tool && <p className="text-xs font-mono text-zinc-500 animate-pulse">Pensando…</p>}
         <div className={`prose-adam ${streaming ? "caret" : ""}`}>
-          <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>{m.content || ""}</ReactMarkdown>
+          <MsgCtx.Provider value={{ m, streaming }}>
+            <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>{m.content || ""}</ReactMarkdown>
+          </MsgCtx.Provider>
         </div>
         {m.links?.length > 0 && <LinkList links={m.links} />}
-        {m.files?.map((f) => (f.kind === "image" ? <GeneratedImage key={f.id} file={f} /> : <FileCard key={f.id} file={f} />))}
+        {m.files?.filter((f) => f.source !== "chat_block").map((f) => (f.kind === "image" ? <GeneratedImage key={f.id} file={f} /> : <FileCard key={f.id} file={f} />))}
         {!streaming && m.content && <SpeakButton m={m} />}
       </div>
     </div>

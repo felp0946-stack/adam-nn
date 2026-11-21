@@ -6,6 +6,7 @@ import logging
 import os
 import re
 import secrets
+import unicodedata
 import uuid
 from contextlib import suppress
 from datetime import datetime, timedelta, timezone
@@ -209,7 +210,8 @@ Método de raciocínio (siga sempre em tarefas complexas — matemática, lógic
 Se não tiver certeza de um fato, diga e use pesquisar_web. Quando houver trechos da base de conhecimento do usuário, use-os e cite o nome do documento.
 
 Ferramentas disponíveis:
-- criar_arquivo: SEMPRE que o usuário pedir um documento, planilha, script, site ou qualquer arquivo para baixar, chame esta ferramenta (pdf, docx, xlsx, py, js, html, css, json, md, csv, txt, etc.). Para sites, gere um único arquivo .html completo com CSS e JS embutidos (nunca cole o código do site só no chat: o arquivo aparece com prévia ao vivo, aba de código, botão para abrir no navegador e envio ao GitHub).
+- SITES, páginas web, landing pages e portfólios: NÃO use criar_arquivo. Escreva uma frase curta dizendo o que vai construir e, em seguida, o site completo em UM ÚNICO bloco ```html (documento começando com <!DOCTYPE html>, CSS e JS embutidos, com <title>). O usuário acompanha a construção ao vivo num painel lateral com Pré-visualização, código, abrir no navegador e envio ao GitHub; o arquivo é salvo automaticamente. Depois do bloco, resuma em 2-3 linhas o que foi feito.
+- criar_arquivo: SEMPRE que o usuário pedir um documento, planilha, script ou outro arquivo para baixar (pdf, docx, xlsx, py, js, css, json, md, csv, txt, etc.), chame esta ferramenta.
   - pdf/docx: conteúdo em texto com títulos "# ", "## ", listas "- " e **negrito**.
   - xlsx: conteúdo em CSV (primeira linha = cabeçalho).
 - gerar_imagem: quando o usuário pedir para criar/desenhar/gerar uma imagem. Escreva o prompt em inglês, detalhado.
@@ -273,7 +275,39 @@ async def build_system(user_id: str) -> str:
 
 # ---------- Files ----------
 def file_public(rec: dict) -> dict:
-    return {k: rec.get(k) for k in ("id", "name", "mime", "size", "kind", "prompt", "created_at")}
+    return {k: rec.get(k) for k in ("id", "name", "mime", "size", "kind", "prompt", "created_at", "source", "block_index")}
+
+
+def code_blocks(text: str) -> list:
+    out, lang, buf = [], None, []
+    for line in text.split("\n"):
+        s = line.strip()
+        if lang is None and s.startswith("```"):
+            lang, buf = s[3:].strip().lower(), []
+        elif lang is not None and s == "```":
+            out.append((lang, "\n".join(buf)))
+            lang = None
+        elif lang is not None:
+            buf.append(line)
+    if lang is not None:
+        out.append((lang, "\n".join(buf)))
+    return out
+
+
+def site_blocks(text: str) -> list:
+    return [c for lang, c in code_blocks(text)
+            if lang in ("", "html", "htm") and re.search(r"<!doctype html|<html[\s>]", c[:500], re.I)]
+
+
+async def save_site_blocks(user_id: str, text: str) -> list:
+    files = []
+    for i, code in enumerate(site_blocks(text)):
+        m = re.search(r"<title[^>]*>(.*?)</title>", code, re.I | re.S)
+        title = unicodedata.normalize("NFKD", m.group(1) if m else "site").encode("ascii", "ignore").decode()
+        base = re.sub(r"[^a-z0-9]+", "-", title.lower().strip())[:50].strip("-") or "site"
+        data, mime = await asyncio.to_thread(files_util.build_file, f"{base}.html", code)
+        files.append(await save_file(user_id, f"{base}.html", data, mime, "generated", source="chat_block", block_index=i))
+    return files
 
 
 async def save_file(user_id: str, name: str, data: bytes, mime: str, kind: str, **extra) -> dict:
@@ -332,7 +366,7 @@ async def dispatch_tool(user_id: str, name: str, args: dict):
 async def run_pro(user_id, system, history, text, images, tools=None):
     initial = [{"role": "system", "content": system}] + history
     chat = (LlmChat(api_key=LLM_KEY, session_id=str(uuid.uuid4()), system_message=system, initial_messages=initial)
-            .with_model(*PRO_MODEL).with_tools(tools or TOOLS, tool_choice="auto"))
+            .with_model(*PRO_MODEL).with_params(max_tokens=32000).with_tools(tools or TOOLS, tool_choice="auto"))
     user_msg = UserMessage(text=text, file_contents=[ImageContent(image_base64=b) for b in images])
     for _ in range(6):
         pending = []
@@ -504,6 +538,13 @@ async def chat_turn(user_id: str, body: ChatIn, mode: str = "app", system_overri
         msg = f"\n\n⚠️ Erro ao gerar resposta: {str(e)[:200]}"
         parts.append(msg)
         yield {"type": "delta", "content": msg}
+    if mode == "app":
+        try:
+            for f in await save_site_blocks(user_id, "".join(parts)):
+                files.append(f)
+                yield {"type": "file", "file": f}
+        except Exception:
+            logger.exception("save_site_blocks failed")
     mid = str(uuid.uuid4())
     await db.messages.insert_one({"id": mid, "conversation_id": cid, "user_id": user_id, "role": "assistant",
                                   "content": "".join(parts).strip(), "attachments": [], "files": files, "links": links,
@@ -529,12 +570,87 @@ async def me(user: dict = Depends(require_user)):
     return {"user_id": user["user_id"]}
 
 
+class Run:
+    """A chat turn running in the background; SSE clients attach, detach and re-attach freely."""
+
+    def __init__(self):
+        self.events: list = []
+        self.done = False
+        self.cid = None
+        self.cond = asyncio.Condition()
+
+    async def push(self, ev: dict):
+        async with self.cond:
+            self.events.append(ev)
+            self.cond.notify_all()
+
+    async def finish(self):
+        async with self.cond:
+            self.done = True
+            self.cond.notify_all()
+
+
+RUNS: dict = {}
+BG_TASKS: set = set()
+
+
+def _drop_run(run: Run):
+    if run.cid and RUNS.get(run.cid) is run:
+        RUNS.pop(run.cid, None)
+
+
+async def drive_run(run: Run, gen):
+    try:
+        async for ev in gen:
+            if ev["type"] == "meta":
+                run.cid = ev["conversation_id"]
+                RUNS[run.cid] = run
+            await run.push(ev)
+    except Exception as e:
+        logger.exception("chat run failed")
+        await run.push({"type": "error", "message": str(e)[:200]})
+    finally:
+        await run.finish()
+        asyncio.get_running_loop().call_later(60, _drop_run, run)
+
+
+async def sse_from(run: Run):
+    i = 0
+    while True:
+        async with run.cond:
+            if i >= len(run.events) and not run.done:
+                with suppress(asyncio.TimeoutError):
+                    await asyncio.wait_for(run.cond.wait(), 10)
+            batch, done = run.events[i:], run.done
+        i += len(batch)
+        if not batch and not done:
+            yield ": ping\n\n"
+            continue
+        for ev in batch:
+            yield f"data: {json.dumps(ev, ensure_ascii=False)}\n\n"
+        if done and i >= len(run.events):
+            return
+
+
+SSE_HEADERS = {"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
+
+
 @api.post("/chat/stream")
 async def chat_stream(body: ChatIn, user: dict = Depends(require_user)):
-    async def sse():
-        async for ev in chat_turn(user["user_id"], body):
-            yield f"data: {json.dumps(ev, ensure_ascii=False)}\n\n"
-    return StreamingResponse(sse(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+    run = Run()
+    task = asyncio.create_task(drive_run(run, chat_turn(user["user_id"], body)))
+    BG_TASKS.add(task)
+    task.add_done_callback(BG_TASKS.discard)
+    return StreamingResponse(sse_from(run), media_type="text/event-stream", headers=SSE_HEADERS)
+
+
+@api.get("/chat/runs/{cid}/stream")
+async def chat_resume(cid: str, user: dict = Depends(require_user)):
+    run = RUNS.get(cid)
+    conv = await db.conversations.find_one({"id": cid, "user_id": user["user_id"]}, {"_id": 1})
+    if not run or not conv:
+        raise HTTPException(404, "Nenhuma resposta em andamento")
+    return StreamingResponse(sse_from(run), media_type="text/event-stream", headers=SSE_HEADERS)
 
 
 @api.get("/conversations")
@@ -584,7 +700,8 @@ async def get_conversation(cid: str, user: dict = Depends(require_user)):
     if not conv:
         raise HTTPException(404, "Conversa não encontrada")
     msgs = await db.messages.find({"conversation_id": cid}, {"_id": 0, "model_text": 0, "user_id": 0}).sort("created_at", 1).to_list(1000)
-    return {"conversation": conv, "messages": msgs}
+    run = RUNS.get(cid)
+    return {"conversation": conv, "messages": msgs, "running": bool(run and not run.done)}
 
 
 @api.patch("/conversations/{cid}")

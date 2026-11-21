@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { FileText, Globe, Image as ImageIcon, Phone, Search } from "lucide-react";
 import { toast } from "sonner";
@@ -9,6 +9,8 @@ import MessageBubble from "@/components/adam/MessageBubble";
 import Composer from "@/components/adam/Composer";
 import CallMode from "@/components/adam/CallMode";
 import { speak } from "@/lib/voice";
+import ArtifactPanel from "@/components/adam/ArtifactPanel";
+import { ArtifactCtx, siteBlocks } from "@/lib/artifact";
 
 const SUGGESTIONS = [
   { icon: Globe, text: "Crie um site de portfólio moderno em um único arquivo HTML" },
@@ -58,68 +60,105 @@ export default function ChatPage() {
   const [messages, setMessages] = useState([]);
   const [title, setTitle] = useState("");
   const [busy, setBusy] = useState(false);
+  const [artifact, setArtifact] = useState(null);
   const skipLoad = useRef(null);
   const endRef = useRef(null);
   const convRef = useRef(id || null);
   const sendRef = useRef(null);
+  const abortRef = useRef(null);
+  const autoOpened = useRef(0);
   const [calling, setCalling] = useState(false);
-
-  useEffect(() => {
-    convRef.current = id || null;
-    if (!id) { setMessages([]); setTitle(""); return; }
-    if (skipLoad.current === id) return;
-    api.get(`/conversations/${id}`).then(({ data }) => { setMessages(data.messages); setTitle(data.conversation.title); })
-      .catch(() => { toast.error("Conversa não encontrada"); navigate("/"); });
-  }, [id, api, navigate]);
-
-  useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" }); }, [messages]);
 
   const patchLast = (fn) => setMessages((p) => { const c = [...p]; c[c.length - 1] = fn(c[c.length - 1]); return c; });
 
-  const send = async (text, files, byVoice = false) => {
-    setBusy(true);
+  const consume = async (res, replay = false) => {
     let finalText = "";
-    setMessages((p) => [...p, { id: `u-${Date.now()}`, role: "user", content: text, attachments: files },
-      { id: "streaming", role: "assistant", content: "", files: [], engine }]);
+    await readSSE(res, (ev) => {
+      if (ev.type === "meta") {
+        setTitle(ev.title);
+        if (!convRef.current) { convRef.current = ev.conversation_id; skipLoad.current = ev.conversation_id; navigate(`/chat/${ev.conversation_id}`, { replace: true }); refresh(); }
+      } else if (ev.type === "delta") { finalText += ev.content; patchLast((m) => ({ ...m, content: m.content + ev.content, tool: null })); }
+      else if (ev.type === "tool") patchLast((m) => ({ ...m, tool: ev.label }));
+      else if (ev.type === "file") patchLast((m) => ({ ...m, files: [...m.files, ev.file], tool: null }));
+      else if (ev.type === "link") {
+        patchLast((m) => ({ ...m, links: [...(m.links || []), ev.link], tool: null }));
+        if (!replay && ev.link.kind === "open" && !window.open(ev.link.url, "_blank", "noopener")) toast.info("Seu navegador bloqueou a nova aba. Clique em “Abrir” no cartão.");
+      }
+      else if (ev.type === "error") toast.error(ev.message);
+      else if (ev.type === "done") {
+        patchLast((m) => ({ ...m, id: ev.message_id }));
+        setArtifact((a) => (a?.messageId === "streaming" ? { ...a, messageId: ev.message_id } : a));
+      }
+    });
+    return finalText;
+  };
+
+  const stream = async (url, init, replay) => {
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
+    autoOpened.current = 0;
+    setBusy(true);
     try {
       const token = await api.token();
-      const res = await fetch(`${API}/chat/stream`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ message: text, conversation_id: convRef.current || null, engine, attachment_ids: files.map((f) => f.id) }),
-      });
-      if (!res.ok) throw new Error((await res.json()).detail || `Erro ${res.status}`);
-      await readSSE(res, (ev) => {
-        if (ev.type === "meta") {
-          setTitle(ev.title);
-          if (!convRef.current) { convRef.current = ev.conversation_id; skipLoad.current = ev.conversation_id; navigate(`/chat/${ev.conversation_id}`, { replace: true }); refresh(); }
-        } else if (ev.type === "delta") { finalText += ev.content; patchLast((m) => ({ ...m, content: m.content + ev.content, tool: null })); }
-        else if (ev.type === "tool") patchLast((m) => ({ ...m, tool: ev.label }));
-        else if (ev.type === "file") patchLast((m) => ({ ...m, files: [...m.files, ev.file], tool: null }));
-        else if (ev.type === "link") {
-          patchLast((m) => ({ ...m, links: [...(m.links || []), ev.link], tool: null }));
-          if (ev.link.kind === "open" && !window.open(ev.link.url, "_blank", "noopener")) toast.info("Seu navegador bloqueou a nova aba. Clique em “Abrir” no cartão.");
-        }
-        else if (ev.type === "error") toast.error(ev.message);
-        else if (ev.type === "done") patchLast((m) => ({ ...m, id: ev.message_id }));
-      });
-      if (byVoice === true || (settings.auto_speak && byVoice !== "call")) {
-        if (finalText.trim()) speak(api, finalText, "last").catch(() => toast.error("Não consegui falar a resposta."));
-      }
-      return finalText;
+      const res = await fetch(url, { ...init, signal: ctrl.signal, headers: { ...(init.headers || {}), Authorization: `Bearer ${token}` } });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || `Erro ${res.status}`);
+      return await consume(res, replay);
     } catch (e) {
+      if (ctrl.signal.aborted) return "";
       toast.error(errMsg(e));
       patchLast((m) => ({ ...m, content: m.content || "⚠️ Não foi possível obter resposta." }));
       return "";
     } finally {
-      setBusy(false);
-      refresh();
+      if (abortRef.current === ctrl) { abortRef.current = null; setBusy(false); refresh(); }
     }
   };
+
+  useEffect(() => {
+    convRef.current = id || null;
+    if (skipLoad.current === id && id) return;
+    abortRef.current?.abort();
+    abortRef.current = null;
+    setBusy(false);
+    setArtifact(null);
+    if (!id) { setMessages([]); setTitle(""); return; }
+    api.get(`/conversations/${id}`).then(({ data }) => {
+      setTitle(data.conversation.title);
+      if (!data.running) return setMessages(data.messages);
+      setMessages([...data.messages, { id: "streaming", role: "assistant", content: "", files: [], engine: data.conversation.engine }]);
+      stream(`${API}/chat/runs/${id}/stream`, {}, true);
+    }).catch(() => { toast.error("Conversa não encontrada"); navigate("/"); });
+  }, [id, api, navigate]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => () => abortRef.current?.abort(), []);
+  useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" }); }, [messages]);
+
+  useEffect(() => {
+    const last = messages[messages.length - 1];
+    if (!busy || last?.id !== "streaming") return;
+    const n = siteBlocks(last.content).length;
+    if (n > autoOpened.current) { autoOpened.current = n; setArtifact({ messageId: "streaming", index: n - 1 }); }
+  }, [messages, busy]);
+
+  const send = async (text, files, byVoice = false) => {
+    setMessages((p) => [...p, { id: `u-${Date.now()}`, role: "user", content: text, attachments: files },
+      { id: "streaming", role: "assistant", content: "", files: [], engine }]);
+    const finalText = await stream(`${API}/chat/stream`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: text, conversation_id: convRef.current || null, engine, attachment_ids: files.map((f) => f.id) }),
+    });
+    if (byVoice === true || (settings.auto_speak && byVoice !== "call")) {
+      if (finalText.trim()) speak(api, finalText, "last").catch(() => toast.error("Não consegui falar a resposta."));
+    }
+    return finalText;
+  };
   sendRef.current = send;
+  const ctx = useMemo(() => ({ current: artifact, open: setArtifact }), [artifact]);
 
   return (
-    <div className="flex flex-col h-full min-h-0">
+    <ArtifactCtx.Provider value={ctx}>
+    <div className="flex h-full min-h-0">
+    <div className="flex flex-col flex-1 min-w-0 h-full min-h-0">
       {calling && <CallMode onSend={(t) => sendRef.current(t, [], "call")} onClose={() => setCalling(false)} />}
       <header className="h-14 shrink-0 pl-14 md:pl-6 pr-4 border-b border-white/5 bg-[#090A0F]/80 backdrop-blur-xl flex items-center gap-4 z-20">
         <EngineSelect />
@@ -140,5 +179,8 @@ export default function ChatPage() {
       </div>
       <Composer onSend={send} busy={busy} />
     </div>
+    {artifact && <ArtifactPanel key={artifact.file?.id || `${artifact.messageId === "streaming" ? "s" : artifact.messageId}-${artifact.index}`} artifact={artifact} messages={messages} busy={busy} onClose={() => setArtifact(null)} />}
+    </div>
+    </ArtifactCtx.Provider>
   );
 }

@@ -4,6 +4,7 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { useApi } from "@/lib/api";
 import { openShared } from "@/lib/share";
 import GithubPushDialog from "@/components/adam/GithubPushDialog";
+import { useArtifact } from "@/lib/artifact";
 
 const TYPES = {
   pdf: { icon: FileText, badge: "PDF", cls: "text-rose-400 bg-rose-500/10 border-rose-500/20" },
@@ -60,6 +61,7 @@ export function GeneratedImage({ file }) {
 
 export function FileCard({ file }) {
   const api = useApi();
+  const artifact = useArtifact();
   const [gh, setGh] = useState(false);
   const kind = typeOf(file);
   if (kind === "image") return <GeneratedImage file={file} />;
@@ -75,12 +77,13 @@ export function FileCard({ file }) {
           <p className="text-xs text-zinc-500">{t.badge} · {fmtSize(file.size)}</p>
         </div>
         <div className="flex flex-wrap gap-1.5">
+          {isHtml && artifact && <button onClick={() => artifact.open({ file })} data-testid="file-preview-panel-button" className={`${btn} border-[#F4A261]/40 text-amber-200`}><Eye className="w-3.5 h-3.5" /> Pré-visualização</button>}
           {isHtml && <button onClick={() => openShared(api, file.id)} data-testid="file-open-browser-button" className={`${btn} border-[#2A9D8F]/40 text-emerald-200 hover:bg-[#2A9D8F]/20`}><ExternalLink className="w-3.5 h-3.5" /> Abrir no navegador</button>}
           {!BINARY.includes(kind) && <button onClick={() => setGh(true)} data-testid="file-github-button" className={btn}><Github className="w-3.5 h-3.5" /> GitHub</button>}
           <button onClick={() => downloadFile(api, file)} data-testid="generated-file-card-download" className={btn}><Download className="w-3.5 h-3.5" /> Baixar</button>
         </div>
       </div>
-      {isHtml && <SitePreview file={file} />}
+      {isHtml && !artifact && <SitePreview file={file} />}
       {gh && <GithubPushDialog file={file} open={gh} onOpenChange={setGh} />}
     </div>
   );
